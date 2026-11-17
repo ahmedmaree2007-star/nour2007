@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مسابقة مسجد النور الجديد</title>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Cairo,Tahoma,sans-serif;color:#fff;text-align:center;
+ background:linear-gradient(rgba(6,36,26,.55),rgba(6,36,26,.8)),url(mosque.jpg) center 75%/cover fixed #06241a}
+.wrap{max-width:560px;margin:0 auto;padding:28px 16px;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.q{font-family:Amiri,serif}
+.gold{color:#e0bf5e}
+h1{font-family:Amiri,serif;font-size:clamp(2rem,8vw,3.4rem);margin:26px 0 6px;color:#e0bf5e}
+.box{margin-top:26px;width:100%;background:rgba(6,36,26,.75);border:1px solid rgba(224,191,94,.5);border-radius:18px;padding:22px;backdrop-filter:blur(4px)}
+input{width:100%;margin-top:12px;padding:14px;font-size:1.15rem;text-align:center;border-radius:10px;border:1px solid #c9a227;direction:rtl}
+button{width:100%;margin-top:12px;padding:13px;font:700 1.15rem Cairo;border:0;border-radius:10px;background:#c9a227;color:#06241a;cursor:pointer}
+button:disabled{opacity:.6}
+.err{margin-top:12px;background:rgba(150,20,20,.75);padding:9px;border-radius:8px;font-size:.95rem}
+.card{margin-top:22px;width:100%;background:#fff;color:#1b2a22;border-radius:18px;overflow:hidden;border:2px solid #c9a227;text-align:right}
+.card .top{background:#0f4a2c;color:#e0bf5e;padding:11px 18px;font-weight:700}
+.card .in{padding:20px}
+.lbl{font-size:.8rem;color:#777;margin-top:10px}
+.name{font-size:1.5rem;font-weight:800;color:#0f4a2c}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.grid div{background:#eef7f1;border-radius:12px;padding:10px;text-align:center}
+.grid b{font-size:1.5rem}
+.total{margin-top:12px;background:linear-gradient(270deg,#0f4a2c,#17603a);border-radius:12px;padding:14px;text-align:center;color:#ecd58a}
+.total b{font-size:2.8rem;color:#e0bf5e}
+.badge{display:inline-block;margin-top:14px;padding:5px 20px;border-radius:999px;font-weight:800}
+.ok{background:#d7f2de;color:#14612f}.no{background:#fde0e0;color:#8e1b1b}
+footer{margin-top:auto;padding-top:30px;font-size:.78rem;color:rgba(255,255,255,.7)}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="q gold" style="font-size:1.6rem">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+ <div class="q" style="font-size:clamp(1.4rem,5vw,2rem);margin-top:14px">﴿ وَفِي ذَٰلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ ﴾</div>
+ <h1>مسابقة مسجد النور الجديد</h1>
+ <div style="opacity:.9">"أهل القرآن هم أهل الله وخاصته"</div>
+
+ <form class="box" id="f">
+  <h2 class="gold" style="margin:0">استعلم عن نتيجتك</h2>
+  <div style="font-size:.9rem;opacity:.85;margin-top:4px">اكتب اسمك رباعي كما هو مسجّل في بطاقة الرقم القومي</div>
+  <input id="nid" autocomplete="off" maxlength="100" placeholder="الاسم الرباعي" aria-label="الاسم">
+  <div class="err" id="err" hidden></div>
+  <button id="go">عرض النتيجة</button>
+ </form>
+ <div id="out" style="width:100%"></div>
+ <footer>جميع الحقوق محفوظة لـ Eng / Ahmed Maree</footer>
+</div>
+<script src="firebase-config.js"></script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getFirestore,doc,getDoc} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+const $=id=>document.getElementById(id);
+const nn=s=>String(s||"").replace(/[\u064B-\u065F\u0670\u0640]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").replace(/\s+/g," ").trim().toLowerCase();
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cfg=window.FIREBASE_CONFIG||{};
+const configured=!!(cfg.apiKey&&!String(cfg.apiKey).startsWith("PUT_"));
+const fs=configured?getFirestore(initializeApp(cfg)):null;
+let meta;
+async function getMeta(){
+  if(!meta){const s=await getDoc(doc(fs,"meta","config"));if(!s.exists()||!s.data().salt)throw new Error("EMPTY");meta=s.data();}
+  return meta;
+}
+async function hash(txt,salt,iter){
+  const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(txt),"PBKDF2",false,["deriveBits"]);
+  const b=await crypto.subtle.deriveBits({name:"PBKDF2",hash:"SHA-256",salt:new TextEncoder().encode(salt),iterations:iter},k,128);
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+const card=r=>r.s==="fail"?`<div class="card"><div class="in"><div class="lbl">اسم المتسابق</div><div class="name">${esc(r.n)}</div>
+  <span class="badge no">الحالة: راسب</span><p>نسأل الله أن يوفقك في المرات القادمة، وشكرًا لمشاركتك في مسابقة مسجد النور الجديد.</p></div></div>`
+:`<div class="card"><div class="top">بطاقة النتيجة</div><div class="in"><div class="lbl">اسم المتسابق</div><div class="name">${esc(r.n)}</div>
+  <div class="lbl">المستوى</div><b>${esc(r.l)}</b>
+  <div class="grid"><div><div class="lbl">الحفظ</div><b>${r.m}</b> / 70</div><div><div class="lbl">التجويد</div><b>${r.t}</b> / 30</div></div>
+  <div class="total">المجموع الكلي<br><b>${r.x}</b> / 100</div><div style="text-align:center"><span class="badge ok">الحالة: ناجح</span></div></div></div>`;
+$("f").onsubmit=async e=>{
+  e.preventDefault(); $("err").hidden=true; $("out").innerHTML="";
+  const name=nn($("nid").value);
+  if(name.split(" ").filter(Boolean).length<2){$("err").textContent="اكتب اسمك رباعي كما هو مسجّل في بطاقة الرقم القومي.";$("err").hidden=false;return;}
+  $("go").disabled=true;$("go").textContent="جارٍ البحث...";
+  try{
+    if(!configured)throw new Error("CONFIG");
+    if(!window.crypto||!crypto.subtle)throw new Error("HTTPS");
+    const m=await getMeta();
+    const snap=await getDoc(doc(fs,"results",await hash(name,m.salt,m.iter)));
+    const r=snap.exists()?snap.data().entries:null;
+    $("out").innerHTML=!r||!r.length?`<div class="card"><div class="in" style="text-align:center">لم يتم العثور على نتيجة لهذا الاسم.<br><span style="font-size:.85rem;color:#777">تأكد من كتابة اسمك رباعي كما هو مسجّل في بطاقة الرقم القومي.</span></div></div>`
+      :r.map(card).join("");
+  }catch(ex){
+    const m=String(ex&&ex.message);
+    $("err").textContent=m==="CONFIG"?"لم يتم ربط الموقع بقاعدة البيانات بعد."
+      :m==="EMPTY"?"لم يتم نشر النتائج بعد."
+      :m==="HTTPS"?"يجب فتح الموقع عبر رابط https."
+      :"تعذر تحميل النتائج، حاول لاحقًا.";
+    $("err").hidden=false; }
+  $("go").disabled=false;$("go").textContent="عرض النتيجة";
+};
+</script>
+</body>
+</html>
